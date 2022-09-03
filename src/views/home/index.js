@@ -6,17 +6,22 @@ import {
 	Button,
 	Image,
 	Badge,
+	useToast,
   } from "@chakra-ui/react";
   import { Link } from "react-router-dom";
   import { useWeb3React } from "@web3-react/core";
   import usePlatziPunks from "../../hooks/usePlatziPunks";
   import { useCallback, useEffect, useState } from "react";
+import useTruncatedAddress from "../../hooks/useTruncatedAddress";
   
   const Home = () => {
+	const [ isMinting, setIsMinting ] = useState(false);
 	const [ imageSrc, setImageSrc ] = useState();
 	const [ numberOfAvailablePunks, setNumberOfAvailablePunks ] = useState();
-	const { active, account } = useWeb3React();
+	const [ nextId, setNextId ] = useState();
+	const { active, account, library } = useWeb3React();
 	const platziPunksContract = usePlatziPunks();
+	const toast = useToast();
 
 	const getPlatziPunksData = useCallback(async () => {
 		if (platziPunksContract) {
@@ -28,12 +33,49 @@ import {
 
 			setImageSrc(image);
 			setNumberOfAvailablePunks(maxSupply - totalSupply);
+			setNextId(totalSupply);
 		}
 	}, [ platziPunksContract, account ]);
 
+	const mintPlatziPunk = useCallback(async () => {
+		if ( !platziPunksContract ) return;
+
+		setIsMinting(true);
+
+		platziPunksContract.methods.mint().send({
+			from: account,
+			value: library?.utils.toWei("0.05"),
+		})
+			.on('transactionHash', (transactionHash) => {
+				toast({ 
+					title: 'Transaccion Enviada',
+					description: transactionHash,
+					status: 'info',
+				});
+			})
+			.on('receipt', () => {
+				toast({ 
+					title: 'Transaccion Completada',
+					description: "To the moon 🚀🌙",
+					status: 'success',
+				});
+
+				setIsMinting(false);
+			})
+			.on('error', (error) => 
+				toast({ 
+					title: 'Transaccion Fallida',
+					description: error.message,
+					status: 'error',
+				})
+			)
+	}, [ account, library?.utils, platziPunksContract, toast ]);
+
 	useEffect(() => {
 		getPlatziPunksData();
-	}, [getPlatziPunksData]);
+	}, [getPlatziPunksData, isMinting ]);
+
+	const truncatedAccount = useTruncatedAddress(account);
 
   
 	return (
@@ -92,6 +134,8 @@ import {
 			  bg={"green.400"}
 			  _hover={{ bg: "green.500" }}
 			  disabled={!platziPunksContract}
+			  onClick={mintPlatziPunk}
+			  isLoading={isMinting}
 			>
 			  Obtén tu punk
 			</Button>
@@ -117,13 +161,13 @@ import {
 				<Badge>
 				  Next ID:
 				  <Badge ml={1} colorScheme="green">
-					1
+					{ nextId ?? 1 }
 				  </Badge>
 				</Badge>
 				<Badge ml={2}>
 				  Address:
 				  <Badge ml={1} colorScheme="green">
-					0x0000...0000
+					{ truncatedAccount }
 				  </Badge>
 				</Badge>
 			  </Flex>
